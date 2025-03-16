@@ -249,9 +249,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-    // Updated callClaudeApi function to send the image separately in the payload
     async function callClaudeApi(prompt, imageData, apiKey) {
-        const proxyURL = '/api/claude'; // Relative path on your deployed site
+        const proxyURL = '/api/claude';
         const payload = {
             model: "claude-3-opus-20240229",
             max_tokens: 500,
@@ -264,40 +263,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             ]
         };
-        
-        // If an image is available, add it to the payload
+    
         if (imageData) {
+            // Remove the data URL prefix (if present) to get only the base64 string.
+            const base64Data = imageData.includes(',')
+                ? imageData.split(',')[1]
+                : imageData;
             payload.messages[0].content.push({
                 type: "image",
                 source: {
                     type: "base64",
                     media_type: "image/jpeg",
-                    data: imageData
+                    data: base64Data
                 }
             });
         }
-        
+    
         const headers = {
             "Content-Type": "application/json",
             "x-api-key": apiKey,
             "anthropic-version": "2023-06-01"
         };
-        
+    
         const response = await fetch(proxyURL, {
             method: "POST",
             headers: headers,
             body: JSON.stringify(payload)
         });
-        
+    
         if (!response.ok) {
-            throw new Error(`Proxy error: ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`Proxy error: ${response.statusText} Details: ${errorText}`);
         }
-        
+    
         const result = await response.json();
         return (result.content && result.content[0] && result.content[0].text)
             ? result.content[0].text
             : "No response from Claude";
     }
+    
     
     // Call ChatGPT API (unchanged)
     async function callChatGPTApi(prompt, apiKey) {
