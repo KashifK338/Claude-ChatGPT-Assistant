@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let claudeApiKey = localStorage.getItem('claudeApiKey') || '';
     let chatgptApiKey = localStorage.getItem('chatgptApiKey') || '';
     
+    // Global variable to store the first uploaded image's data URL
+    let uploadedImageDataUrl = null;
+    
     // Update API key inputs with stored values
     claudeApiKeyInput.value = claudeApiKey;
     chatgptApiKeyInput.value = chatgptApiKey;
@@ -107,10 +110,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     function handleFiles(files) {
-        // Display selected images or prepare them for upload
+        // Display selected images and store the first image as a reference
         const imagePreview = document.createElement('div');
         imagePreview.className = 'image-preview';
         imageDropzone.innerHTML = '';
+        
+        // Clear previous image reference
+        uploadedImageDataUrl = null;
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -120,12 +126,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 img.file = file;
                 
                 const reader = new FileReader();
-                reader.onload = (function(aImg) {
-                    return function(e) {
-                        aImg.src = e.target.result;
-                    };
-                })(img);
-                
+                reader.onload = function(e) {
+                    img.src = e.target.result;
+                    // Store the first image's base64 data URL as the image reference
+                    if (!uploadedImageDataUrl) {
+                        uploadedImageDataUrl = e.target.result;
+                    }
+                };
                 reader.readAsDataURL(file);
                 imagePreview.appendChild(img);
             }
@@ -147,6 +154,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function resetDropzone() {
+        // Clear the stored image reference
+        uploadedImageDataUrl = null;
         imageDropzone.innerHTML = `
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M21 14V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V14" stroke="#aaaaaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -165,10 +174,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        const prompt = claudePrompt.value.trim();
-        if (!prompt) {
+        const promptText = claudePrompt.value.trim();
+        if (!promptText) {
             alert('Please enter a prompt for Claude.');
             return;
+        }
+        
+        // Combine text prompt with image reference if an image was uploaded.
+        let combinedPrompt = promptText;
+        if (uploadedImageDataUrl) {
+            combinedPrompt += "\n\n[Image Reference]: " + uploadedImageDataUrl;
         }
         
         // Show loading state
@@ -176,9 +191,9 @@ document.addEventListener('DOMContentLoaded', function() {
         generateWithClaude.disabled = true;
         
         try {
-            const response = await callClaudeApi(prompt, claudeApiKey);
+            const response = await callClaudeApi(combinedPrompt, claudeApiKey);
             claudeOutput.textContent = response;
-            // Automatically copy to ChatGPT prompt
+            // Automatically copy to ChatGPT prompt (if needed)
             chatgptPrompt.value = response;
         } catch (error) {
             claudeOutput.textContent = 'Error: ' + error.message;
@@ -187,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Generate with ChatGPT button
+    // Generate with ChatGPT button (unchanged)
     generateWithChatGPT.addEventListener('click', async function() {
         if (!chatgptApiKey) {
             alert('Please set your ChatGPT API key in the settings.');
@@ -201,7 +216,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Show loading state
         chatgptOutput.textContent = 'Generating...';
         generateWithChatGPT.disabled = true;
         
@@ -215,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Copy buttons
+    // Copy buttons remain unchanged
     copyClaudeOutput.addEventListener('click', function() {
         copyToClipboard(claudeOutput.textContent);
         showCopyFeedback(copyClaudeOutput);
@@ -242,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-// Call Claude API via the proxy endpoint (serverless function)
+  // Call Claude API via the proxy endpoint (serverless function)
 async function callClaudeApi(prompt, apiKey) {
     const proxyURL = '/api/claude'; // This relative path works on your deployed site
     const data = { prompt, apiKey };
@@ -265,7 +279,7 @@ async function callClaudeApi(prompt, apiKey) {
 }
 
     
-    // Call ChatGPT API (using OpenAI's endpoint)
+    // Call ChatGPT API (unchanged)
     async function callChatGPTApi(prompt, apiKey) {
         const API_URL = "https://api.openai.com/v1/chat/completions";
         const data = {
