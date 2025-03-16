@@ -22,7 +22,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let claudeApiKey = localStorage.getItem('claudeApiKey') || '';
     let chatgptApiKey = localStorage.getItem('chatgptApiKey') || '';
     
-    // Global variable to store the first uploaded image's original quality base64 data URL
+    // Global variable to store the first uploaded image's original quality base64 data URL and MIME type
+    // Now stored as an object: { data: "<base64 data URL>", mime: "image/png" } etc.
     let uploadedImageDataUrl = null;
     
     // Update API key inputs with stored values
@@ -109,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Update handleFiles to store the original image without compression.
+    // Update handleFiles to store the original image without compression and record its MIME type.
     function handleFiles(files) {
         const imagePreview = document.createElement('div');
         imagePreview.className = 'image-preview';
@@ -129,10 +130,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 reader.onload = function(e) {
                     img.src = e.target.result;
                     imagePreview.appendChild(img);
-                    // Store the original base64 data URL for the first image.
+                    // Store the original image along with its MIME type for the first image.
                     if (!uploadedImageDataUrl) {
-                        uploadedImageDataUrl = e.target.result;
-                        console.log("Original image length:", uploadedImageDataUrl.length);
+                        uploadedImageDataUrl = {
+                            data: e.target.result,
+                            mime: file.type
+                        };
+                        console.log("Original image length:", uploadedImageDataUrl.data.length);
                     }
                 };
                 reader.readAsDataURL(file);
@@ -184,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
         generateWithClaude.disabled = true;
         
         try {
-            // Pass the text prompt and the original image data URL (if available)
+            // Pass the text prompt and the original image data (if available)
             const response = await callClaudeApi(promptText, uploadedImageDataUrl, claudeApiKey);
             claudeOutput.textContent = response;
             chatgptPrompt.value = response; // Auto-fill ChatGPT prompt if desired
@@ -249,6 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
+    // Updated Claude API call function to support all image formats.
     async function callClaudeApi(prompt, imageData, apiKey) {
         const proxyURL = '/api/claude';
         const payload = {
@@ -265,15 +270,25 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     
         if (imageData) {
-            // Remove the data URL prefix (if present) to get only the base64 string.
-            const base64Data = imageData.includes(',')
-                ? imageData.split(',')[1]
-                : imageData;
+            let base64Data, mediaType;
+            // Check if imageData is an object containing both the data and its MIME type.
+            if (typeof imageData === 'object') {
+                base64Data = imageData.data.includes(',')
+                    ? imageData.data.split(',')[1]
+                    : imageData.data;
+                mediaType = imageData.mime;
+            } else {
+                base64Data = imageData.includes(',')
+                    ? imageData.split(',')[1]
+                    : imageData;
+                mediaType = 'image/jpeg'; // fallback
+            }
+    
             payload.messages[0].content.push({
                 type: "image",
                 source: {
                     type: "base64",
-                    media_type: "image/jpeg",
+                    media_type: mediaType,
                     data: base64Data
                 }
             });
@@ -301,7 +316,6 @@ document.addEventListener('DOMContentLoaded', function() {
             ? result.content[0].text
             : "No response from Claude";
     }
-    
     
     // Call ChatGPT API (unchanged)
     async function callChatGPTApi(prompt, apiKey) {
