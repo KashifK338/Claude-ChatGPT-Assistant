@@ -4,19 +4,26 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
   
-    // Expect the full payload (including messages) along with the API key.
-    const { apiKey, ...payload } = req.body;
-    if (!apiKey || !payload) {
-      return res.status(400).json({ error: 'Missing payload or apiKey' });
+    // Read the API key from the request headers.
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Missing API key in header' });
     }
   
-    // Optional: Log a snippet of the text prompt for debugging
-    const textSnippet = payload.messages &&
-                        payload.messages[0] &&
-                        payload.messages[0].content &&
-                        payload.messages[0].content[0] &&
-                        payload.messages[0].content[0].text;
-    console.log("Received prompt snippet:", textSnippet ? textSnippet.slice(0, 200) : '');
+    // The entire request body is the payload to forward.
+    const payload = req.body;
+    if (!payload || Object.keys(payload).length === 0) {
+      return res.status(400).json({ error: 'Missing payload' });
+    }
+  
+    // Log a snippet from the text prompt for debugging.
+    let textSnippet = '';
+    try {
+      textSnippet = payload.messages[0].content[0].text;
+    } catch (err) {
+      // No valid text found.
+    }
+    console.log("Received prompt snippet:", textSnippet ? textSnippet.slice(0, 200) : 'None');
   
     const API_URL = "https://api.anthropic.com/v1/messages";
   
@@ -32,8 +39,9 @@ export default async function handler(req, res) {
       });
   
       if (!response.ok) {
-        console.error("Anthropic API error:", response.status, response.statusText);
-        return res.status(response.status).json({ error: response.statusText });
+        const errorText = await response.text();
+        console.error("Anthropic API error:", response.status, response.statusText, errorText);
+        return res.status(response.status).json({ error: response.statusText, details: errorText });
       }
   
       const result = await response.json();
