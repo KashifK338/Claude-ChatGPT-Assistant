@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let claudeApiKey = localStorage.getItem('claudeApiKey') || '';
     let chatgptApiKey = localStorage.getItem('chatgptApiKey') || '';
     
-    // Global variable to store the first uploaded image's compressed base64 data URL
+    // Global variable to store the first uploaded image's original quality base64 data URL
     let uploadedImageDataUrl = null;
     
     // Update API key inputs with stored values
@@ -109,48 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Function to compress image using a canvas
-    function compressImage(file, maxWidth = 100, maxHeight = 100, quality = 0.7) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                img.src = e.target.result;
-            };
-            
-            img.onload = function() {
-                let { width, height } = img;
-                // Resize while preserving aspect ratio.
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height = Math.floor(height * maxWidth / width);
-                        width = maxWidth;
-                    }
-                } else {
-                    if (height > maxHeight) {
-                        width = Math.floor(width * maxHeight / height);
-                        height = maxHeight;
-                    }
-                }
-                
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                // Convert to compressed JPEG base64 string.
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
-                resolve(dataUrl);
-            };
-            
-            reader.onerror = error => reject(error);
-            
-            reader.readAsDataURL(file);
-        });
-    }
-    
-    // Update handleFiles to compress the first image.
+    // Update handleFiles to store the original image without compression.
     function handleFiles(files) {
         const imagePreview = document.createElement('div');
         imagePreview.className = 'image-preview';
@@ -166,19 +125,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 img.className = 'preview-img';
                 img.file = file;
                 
-                // Read and display the original image preview
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     img.src = e.target.result;
                     imagePreview.appendChild(img);
-                    // Compress and store the first image as reference.
+                    // Store the original base64 data URL for the first image.
                     if (!uploadedImageDataUrl) {
-                        compressImage(file)
-                          .then(compressedDataUrl => {
-                              uploadedImageDataUrl = compressedDataUrl;
-                              console.log("Compressed image length:", compressedDataUrl.length);
-                          })
-                          .catch(err => console.error("Error compressing image:", err));
+                        uploadedImageDataUrl = e.target.result;
+                        console.log("Original image length:", uploadedImageDataUrl.length);
                     }
                 };
                 reader.readAsDataURL(file);
@@ -212,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
     
-    // Generate with Claude button
+    // Generate with Claude button with updated image handling
     generateWithClaude.addEventListener('click', async function() {
         if (!claudeApiKey) {
             alert('Please set your Claude API key in the settings.');
@@ -226,19 +180,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Combine text prompt with image reference if available.
-        let combinedPrompt = promptText;
-        if (uploadedImageDataUrl) {
-            // Here, we append the compressed image data.
-            combinedPrompt += "\n\n[Image Reference]: " + uploadedImageDataUrl;
-        }
-        
-        // Show prompt length for debugging.
-        claudeOutput.textContent = 'Generating... (Prompt length: ' + combinedPrompt.length + ' characters)';
+        claudeOutput.textContent = 'Generating...';
         generateWithClaude.disabled = true;
         
         try {
-            const response = await callClaudeApi(combinedPrompt, claudeApiKey);
+            // Pass the text prompt and the original image data URL (if available)
+            const response = await callClaudeApi(promptText, uploadedImageDataUrl, claudeApiKey);
             claudeOutput.textContent = response;
             chatgptPrompt.value = response; // Auto-fill ChatGPT prompt if desired
         } catch (error) {
@@ -302,21 +249,50 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-    // Call Claude API via the proxy endpoint (serverless function)
-    async function callClaudeApi(prompt, apiKey) {
+    // Updated callClaudeApi function to send the image separately in the payload
+    async function callClaudeApi(prompt, imageData, apiKey) {
         const proxyURL = '/api/claude'; // Relative path on your deployed site
-        const data = { prompt, apiKey };
-
+        const payload = {
+            model: "claude-3-opus-20240229",
+            max_tokens: 500,
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: prompt }
+                    ]
+                }
+            ]
+        };
+        
+        // If an image is available, add it to the payload
+        if (imageData) {
+            payload.messages[0].content.push({
+                type: "image",
+                source: {
+                    type: "base64",
+                    media_type: "image/jpeg",
+                    data: imageData
+                }
+            });
+        }
+        
+        const headers = {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01"
+        };
+        
         const response = await fetch(proxyURL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
+            headers: headers,
+            body: JSON.stringify(payload)
         });
-
+        
         if (!response.ok) {
             throw new Error(`Proxy error: ${response.statusText}`);
         }
-
+        
         const result = await response.json();
         return (result.content && result.content[0] && result.content[0].text)
             ? result.content[0].text

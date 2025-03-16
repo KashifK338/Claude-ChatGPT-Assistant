@@ -4,21 +4,21 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
   
-    const { prompt, apiKey } = req.body;
-    if (!prompt || !apiKey) {
-      return res.status(400).json({ error: 'Missing prompt or apiKey' });
+    // Expect the full payload (including messages) along with the API key.
+    const { apiKey, ...payload } = req.body;
+    if (!apiKey || !payload) {
+      return res.status(400).json({ error: 'Missing payload or apiKey' });
     }
-    
-    // Log the prompt length and a snippet (first 200 characters)
-    console.log("Received prompt length:", prompt.length);
-    console.log("Prompt snippet:", prompt.slice(0, 200));
+  
+    // Optional: Log a snippet of the text prompt for debugging
+    const textSnippet = payload.messages &&
+                        payload.messages[0] &&
+                        payload.messages[0].content &&
+                        payload.messages[0].content[0] &&
+                        payload.messages[0].content[0].text;
+    console.log("Received prompt snippet:", textSnippet ? textSnippet.slice(0, 200) : '');
   
     const API_URL = "https://api.anthropic.com/v1/messages";
-    const data = {
-      model: "claude-3-opus-20240229",
-      max_tokens: 100,
-      messages: [{ role: "user", content: prompt }]
-    };
   
     try {
       const response = await fetch(API_URL, {
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
           "anthropic-version": "2023-06-01",
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
       });
   
       if (!response.ok) {
