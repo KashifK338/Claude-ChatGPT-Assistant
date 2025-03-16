@@ -301,3 +301,19 @@ textarea::placeholder {
     color: white;
 }
 
+
+.image-preview {
+    width: 150px;      /* Fixed thumbnail width */
+    height: 150px;     /* Fixed thumbnail height */
+    overflow: hidden;  /* Hide any part of the image that exceeds these dimensions */
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin: 10px auto; /* Center the thumbnail and add vertical spacing */
+}
+
+
+.preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Scale the image to fill the container while maintaining its aspect ratio */
+}
