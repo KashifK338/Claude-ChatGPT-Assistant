@@ -242,35 +242,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-    // Call Claude API (using Anthropic's endpoint)
-    async function callClaudeApi(prompt, apiKey) {
-        const API_URL = "https://api.anthropic.com/v1/messages";
-        const data = {
-            "model": "claude-3-opus-20240229",
-            "max_tokens": 100,
-            "messages": [{ "role": "user", "content": prompt }]
-        };
-        
-        const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(data)
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Claude API error: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        // Adjust extraction as needed based on actual API response structure
-        return (result.content && result.content[0] && result.content[0].text) 
-            ? result.content[0].text 
-            : "No response from Claude";
+// Call Claude API via the proxy endpoint (serverless function)
+async function callClaudeApi(prompt, apiKey) {
+    const proxyURL = '/api/claude'; // This relative path works on your deployed site
+    const data = { prompt, apiKey };
+
+    const response = await fetch(proxyURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+        throw new Error(`Proxy error: ${response.statusText}`);
     }
+
+    const result = await response.json();
+    // Extract Claude's response; adjust based on actual structure returned by Anthropic
+    return (result.content && result.content[0] && result.content[0].text)
+        ? result.content[0].text
+        : "No response from Claude";
+}
+
     
     // Call ChatGPT API (using OpenAI's endpoint)
     async function callChatGPTApi(prompt, apiKey) {
