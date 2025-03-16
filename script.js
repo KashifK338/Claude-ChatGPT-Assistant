@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update API key inputs with stored values
     claudeApiKeyInput.value = claudeApiKey;
     chatgptApiKeyInput.value = chatgptApiKey;
-
+    
     // Modal event listeners
     settingsButton.addEventListener('click', function() {
         apiSettingsModal.classList.add('active');
@@ -176,16 +176,10 @@ document.addEventListener('DOMContentLoaded', function() {
         generateWithClaude.disabled = true;
         
         try {
-            // This is a placeholder for the actual API call
-            // In a real implementation, you would call the Claude API here
-            const response = await simulateClaudeApi(prompt, claudeApiKey);
-            
-            // Update UI with response
+            const response = await callClaudeApi(prompt, claudeApiKey);
             claudeOutput.textContent = response;
-            
-            // Automatically copy to ChatGPT input
+            // Automatically copy to ChatGPT prompt
             chatgptPrompt.value = response;
-            
         } catch (error) {
             claudeOutput.textContent = 'Error: ' + error.message;
         } finally {
@@ -212,13 +206,8 @@ document.addEventListener('DOMContentLoaded', function() {
         generateWithChatGPT.disabled = true;
         
         try {
-            // This is a placeholder for the actual API call
-            // In a real implementation, you would call the ChatGPT API here
-            const response = await simulateChatGPTApi(prompt, chatgptApiKey);
-            
-            // Update UI with response
+            const response = await callChatGPTApi(prompt, chatgptApiKey);
             chatgptOutput.textContent = response;
-            
         } catch (error) {
             chatgptOutput.textContent = 'Error: ' + error.message;
         } finally {
@@ -253,21 +242,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-    // API simulation functions (replace these with actual API calls in production)
-    async function simulateClaudeApi(prompt, apiKey) {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+    // Call Claude API (using Anthropic's endpoint)
+    async function callClaudeApi(prompt, apiKey) {
+        const API_URL = "https://api.anthropic.com/v1/messages";
+        const data = {
+            "model": "claude-3-opus-20240229",
+            "max_tokens": 100,
+            "messages": [{ "role": "user", "content": prompt }]
+        };
         
-        // Simple response generation (replace with actual API call)
-        return `Here is Claude's response to: "${prompt}"\n\nThis is a simulated response. In a real implementation, this would be replaced with the actual response from Claude API using the provided API key.`;
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "x-api-key": apiKey,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Claude API error: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        // Adjust extraction as needed based on actual API response structure
+        return (result.content && result.content[0] && result.content[0].text) 
+            ? result.content[0].text 
+            : "No response from Claude";
     }
     
-    async function simulateChatGPTApi(prompt, apiKey) {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+    // Call ChatGPT API (using OpenAI's endpoint)
+    async function callChatGPTApi(prompt, apiKey) {
+        const API_URL = "https://api.openai.com/v1/chat/completions";
+        const data = {
+            "model": "gpt-4-turbo",
+            "messages": [{ "role": "user", "content": prompt }]
+        };
         
-        // Simple response generation (replace with actual API call)
-        return `Here is ChatGPT's response to: "${prompt}"\n\nThis is a simulated response. In a real implementation, this would be replaced with the actual response from ChatGPT API using the provided API key.`;
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`ChatGPT API error: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        return (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content)
+            ? result.choices[0].message.content
+            : "No response from ChatGPT";
     }
 });
-
