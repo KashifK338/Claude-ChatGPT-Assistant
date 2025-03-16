@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let claudeApiKey = localStorage.getItem('claudeApiKey') || '';
     let chatgptApiKey = localStorage.getItem('chatgptApiKey') || '';
     
-    // Global variable to store the first uploaded image's data URL
+    // Global variable to store the first uploaded image's compressed base64 data URL
     let uploadedImageDataUrl = null;
     
     // Update API key inputs with stored values
@@ -109,8 +109,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Function to compress image using a canvas
+    function compressImage(file, maxWidth = 100, maxHeight = 100, quality = 0.7) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                img.src = e.target.result;
+            };
+            
+            img.onload = function() {
+                let { width, height } = img;
+                // Resize while preserving aspect ratio.
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.floor(height * maxWidth / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.floor(width * maxHeight / height);
+                        height = maxHeight;
+                    }
+                }
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                // Convert to compressed JPEG base64 string.
+                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataUrl);
+            };
+            
+            reader.onerror = error => reject(error);
+            
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    // Update handleFiles to compress the first image.
     function handleFiles(files) {
-        // Display selected images and store the first image as a reference
         const imagePreview = document.createElement('div');
         imagePreview.className = 'image-preview';
         imageDropzone.innerHTML = '';
@@ -125,16 +166,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 img.className = 'preview-img';
                 img.file = file;
                 
+                // Read and display the original image preview
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     img.src = e.target.result;
-                    // Store the first image's base64 data URL as the image reference
+                    imagePreview.appendChild(img);
+                    // Compress and store the first image as reference.
                     if (!uploadedImageDataUrl) {
-                        uploadedImageDataUrl = e.target.result;
+                        compressImage(file)
+                          .then(compressedDataUrl => {
+                              uploadedImageDataUrl = compressedDataUrl;
+                              console.log("Compressed image length:", compressedDataUrl.length);
+                          })
+                          .catch(err => console.error("Error compressing image:", err));
                     }
                 };
                 reader.readAsDataURL(file);
-                imagePreview.appendChild(img);
             }
         }
         
@@ -154,7 +201,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function resetDropzone() {
-        // Clear the stored image reference
         uploadedImageDataUrl = null;
         imageDropzone.innerHTML = `
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -166,6 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
     
+    // Generate with Claude button
     generateWithClaude.addEventListener('click', async function() {
         if (!claudeApiKey) {
             alert('Please set your Claude API key in the settings.');
@@ -179,24 +226,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Combine text prompt with image reference if an image was uploaded.
+        // Combine text prompt with image reference if available.
         let combinedPrompt = promptText;
         if (uploadedImageDataUrl) {
-            // For demonstration, we're appending the full base64 data.
-            // (Consider truncating this in production.)
+            // Here, we append the compressed image data.
             combinedPrompt += "\n\n[Image Reference]: " + uploadedImageDataUrl;
         }
         
-        // Show the prompt length on the front end:
-        // You can display it along with your "Generating..." message.
+        // Show prompt length for debugging.
         claudeOutput.textContent = 'Generating... (Prompt length: ' + combinedPrompt.length + ' characters)';
         generateWithClaude.disabled = true;
         
         try {
             const response = await callClaudeApi(combinedPrompt, claudeApiKey);
             claudeOutput.textContent = response;
-            // Automatically copy to ChatGPT prompt (if needed)
-            chatgptPrompt.value = response;
+            chatgptPrompt.value = response; // Auto-fill ChatGPT prompt if desired
         } catch (error) {
             claudeOutput.textContent = 'Error: ' + error.message;
         } finally {
@@ -258,28 +302,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
     
-  // Call Claude API via the proxy endpoint (serverless function)
-async function callClaudeApi(prompt, apiKey) {
-    const proxyURL = '/api/claude'; // This relative path works on your deployed site
-    const data = { prompt, apiKey };
+    // Call Claude API via the proxy endpoint (serverless function)
+    async function callClaudeApi(prompt, apiKey) {
+        const proxyURL = '/api/claude'; // Relative path on your deployed site
+        const data = { prompt, apiKey };
 
-    const response = await fetch(proxyURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-    });
+        const response = await fetch(proxyURL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
 
-    if (!response.ok) {
-        throw new Error(`Proxy error: ${response.statusText}`);
+        if (!response.ok) {
+            throw new Error(`Proxy error: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return (result.content && result.content[0] && result.content[0].text)
+            ? result.content[0].text
+            : "No response from Claude";
     }
-
-    const result = await response.json();
-    // Extract Claude's response; adjust based on actual structure returned by Anthropic
-    return (result.content && result.content[0] && result.content[0].text)
-        ? result.content[0].text
-        : "No response from Claude";
-}
-
     
     // Call ChatGPT API (unchanged)
     async function callChatGPTApi(prompt, apiKey) {
