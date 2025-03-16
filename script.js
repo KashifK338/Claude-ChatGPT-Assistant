@@ -166,7 +166,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
     
-    // Generate with Claude button
     generateWithClaude.addEventListener('click', async function() {
         if (!claudeApiKey) {
             alert('Please set your Claude API key in the settings.');
@@ -183,11 +182,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // Combine text prompt with image reference if an image was uploaded.
         let combinedPrompt = promptText;
         if (uploadedImageDataUrl) {
+            // For demonstration, we're appending the full base64 data.
+            // (Consider truncating this in production.)
             combinedPrompt += "\n\n[Image Reference]: " + uploadedImageDataUrl;
         }
         
-        // Show loading state
-        claudeOutput.textContent = 'Generating...';
+        // Show the prompt length on the front end:
+        // You can display it along with your "Generating..." message.
+        claudeOutput.textContent = 'Generating... (Prompt length: ' + combinedPrompt.length + ' characters)';
         generateWithClaude.disabled = true;
         
         try {
